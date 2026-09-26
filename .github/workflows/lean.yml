@@ -1,0 +1,108 @@
+name: Lean check
+
+# Dispatched by Cairn Commons for a claim's Lean artifact. Three jobs with decreasing exposure to untrusted input:
+#   elaborate — runs the untrusted file through Lean (can execute code!) with NO secrets; uploads only its .olean.
+#   check     — fresh VM, no secrets: builds the trusted inspector first, then kernel replay (leanchecker) and
+#               axioms/target check of the .olean by the inspector, which never runs the submission's initializers.
+#   report    — has the webhook secret; only reads check's result.json, validates it strictly, signs and posts it.
+on:
+  workflow_dispatch:
+    inputs:
+      run_id: { description: "Verification run id", required: true }
+      artifact_url: { description: "Artifact URL (Cairn Commons API)", required: true }
+      artifact_sha256: { description: "Expected SHA-256 of the artifact", required: true }
+      theorem: { description: "Main theorem name", required: false, default: "main" }
+      target_b64: { description: "Base64 Lean statement the theorem must prove (optional)", required: false, default: "" }
+
+permissions: {}
+
+concurrency:
+  group: lean-${{ inputs.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  elaborate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions: { contents: read }
+    env:
+      ARTIFACT_URL: ${{ inputs.artifact_url }}
+      ARTIFACT_SHA256: ${{ inputs.artifact_sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node scripts/prepare-lean.mjs
+      # Restore only: caches are written exclusively by the trusted self-test workflow, so an untrusted
+      # submission can never poison the mathlib build used by later runs.
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            .lake/packages
+            ~/.elan
+          key: lake-${{ hashFiles('versions.env') }}
+      - run: scripts/setup-lean.sh
+      - name: Build the submission (untrusted code)
+        run: scripts/lean-elaborate.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: submission
+          path: |
+            build-ok.txt
+            CairnVerify/Submission.lean
+            .lake/build/lib/lean/CairnVerify/Submission.*
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
+
+  check:
+    needs: elaborate
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions: { contents: read }
+    env:
+      RUN_ID: ${{ inputs.run_id }}
+      ARTIFACT_SHA256: ${{ inputs.artifact_sha256 }}
+      THEOREM: ${{ inputs.theorem }}
+      TARGET_B64: ${{ inputs.target_b64 }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      # Restore only: caches are written exclusively by the trusted self-test workflow, so an untrusted
+      # submission can never poison the mathlib build used by later runs.
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            .lake/packages
+            ~/.elan
+          key: lake-${{ hashFiles('versions.env') }}
+      - run: scripts/setup-lean.sh
+      - uses: actions/download-artifact@v4
+        with: { name: submission, path: incoming }
+      - name: Kernel replay, axioms and target statement
+        run: scripts/lean-check.sh incoming
+      - uses: actions/upload-artifact@v4
+        with: { name: result, path: result.json, retention-days: 7 }
+
+  report:
+    needs: check
+    if: always() && needs.check.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: { contents: read }
+    environment: report
+    env:
+      RUN_ID: ${{ inputs.run_id }}
+      WEBHOOK_SECRET: ${{ secrets.CAIRN_WEBHOOK_SECRET }}
+      CALLBACK_URL: ${{ vars.CAIRN_CALLBACK_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false, sparse-checkout: scripts }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/download-artifact@v4
+        with: { name: result }
+      - run: node scripts/report.mjs

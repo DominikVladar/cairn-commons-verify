@@ -1,0 +1,12 @@
+.lake/
+lakefile.toml
+lean-toolchain
+lake-manifest.json
+incoming/
+work/
+result.json
+policy.json
+build-ok.txt
+inspection.txt
+CairnVerify/Submission.lean
+CairnVerify/Target.lean

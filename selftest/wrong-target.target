@@ -1,0 +1,1 @@
+∀ n : ℕ, 2 ≤ n → ∃ p, Nat.Prime p ∧ p ∣ n

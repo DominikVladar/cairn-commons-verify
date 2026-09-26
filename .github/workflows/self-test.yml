@@ -1,0 +1,51 @@
+name: Self-test
+
+# Trusted end-to-end test of the Lean pipeline with known samples (selftest/). Also the ONLY workflow that saves
+# the toolchain + mathlib cache used by lean.yml. Run it after changing versions.env or the scripts.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["versions.env", "lakefile.toml.in", "CairnCheck.lean", "scripts/**", "selftest/**"]
+
+permissions: { contents: read }
+
+concurrency:
+  group: self-test
+  cancel-in-progress: true
+
+jobs:
+  lean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .lake/packages
+            ~/.elan
+          key: lake-${{ hashFiles('versions.env') }}
+      - run: scripts/setup-lean.sh
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .lake/packages
+            ~/.elan
+          key: lake-${{ hashFiles('versions.env') }}
+      - run: scripts/self-test.sh
+
+  reproduce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: scripts/self-test-reproduce.sh

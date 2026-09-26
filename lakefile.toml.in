@@ -1,0 +1,16 @@
+# Generated in CI from versions.env (see .github/workflows/lean.yml).
+name = "cairn-verify"
+defaultTargets = ["CairnVerify"]
+
+[[require]]
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4"
+rev = "@MATHLIB_REV@"
+
+[[lean_lib]]
+name = "CairnVerify"
+
+# Trusted inspector (see CairnCheck.lean); built before any untrusted file is present.
+[[lean_exe]]
+name = "cairncheck"
+root = "CairnCheck"

@@ -1,0 +1,59 @@
+name: Reproduce
+
+# Re-runs a claim's code in a locked-down container (no network, read-only, resource limits, timeout) and
+# compares stdout with the expected hash. The job that runs the code has no secrets; `report` signs the result.
+on:
+  workflow_dispatch:
+    inputs:
+      run_id: { required: true }
+      artifact_url: { required: true }
+      artifact_sha256: { required: true }
+      filename: { required: false, default: "main.py" }
+      image: { required: true }
+      command: { required: true }
+      expected_sha256: { required: true }
+      timeout_seconds: { required: false, default: "600" }
+
+permissions: {}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions: { contents: read }
+    env:
+      RUN_ID: ${{ inputs.run_id }}
+      ARTIFACT_URL: ${{ inputs.artifact_url }}
+      ARTIFACT_SHA256: ${{ inputs.artifact_sha256 }}
+      FILENAME: ${{ inputs.filename }}
+      IMAGE: ${{ inputs.image }}
+      COMMAND: ${{ inputs.command }}
+      EXPECTED_SHA256: ${{ inputs.expected_sha256 }}
+      TIMEOUT_SECONDS: ${{ inputs.timeout_seconds }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node scripts/run-reproduction.mjs
+      - uses: actions/upload-artifact@v4
+        with: { name: result, path: result.json, retention-days: 7 }
+
+  report:
+    needs: run
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: { contents: read }
+    environment: report
+    env:
+      RUN_ID: ${{ inputs.run_id }}
+      WEBHOOK_SECRET: ${{ secrets.CAIRN_WEBHOOK_SECRET }}
+      CALLBACK_URL: ${{ vars.CAIRN_CALLBACK_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false, sparse-checkout: scripts }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/download-artifact@v4
+        with: { name: result }
+      - run: node scripts/report.mjs
