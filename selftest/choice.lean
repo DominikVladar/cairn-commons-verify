@@ -1,4 +1,4 @@
-import Mathlib.Logic.Basic
+import Mathlib.Data.Nat.Prime.Basic
 
 /-- Self-test: classical reasoning is fine (standard axioms only); must pass without a target. -/
 theorem main (p : Prop) : p ∨ ¬p := Classical.em p
