@@ -1,13 +1,13 @@
 # cairn-commons-verify
 
-Public verification runners for [Cairn Commons](https://github.com/DominikVladar/cairn-commons). Untrusted code
+Public verification runners for Cairn Commons. Untrusted code
 never runs on the platform's server. It runs here in GitHub Actions, which is free for public repositories.
 This repository is generated from the `verify/` directory of the main repository. Change it there and copy it
 over.
 
 | Workflow | What it checks |
 |---|---|
-| `lean.yml` | A claim's Lean 4 + mathlib file. Checks: static policy (no `sorry`, new axioms, `#eval`, macros/elaborators, `initialize`, `IO`, `native_decide`, only Mathlib-family imports), compilation, **kernel replay** with `leanchecker`, axioms ⊆ {propext, Classical.choice, Quot.sound}, the theorem is declared in the submitted file, and optionally that its type is definitionally equal (kernel) to the problem's pinned target statement. |
+| `lean.yml` | A claim's Lean 4 + mathlib file. Checks: static policy (no `sorry`, new axioms, `#eval`, macros/elaborators, `initialize`, `IO`, `native_decide`, only Mathlib-family imports), compilation, **kernel replay** with `leanchecker`, axioms ⊆ {propext, Classical.choice, Quot.sound}, the theorem is declared in the submitted file, and that its type is definitionally equal (kernel) to the **pinned statement**. A run without a pinned statement always fails: a proof is only meaningful relative to what it proves. |
 | `reproduce.yml` | Re-runs submitted code in Docker and compares its stdout with the claimed output (SHA-256). |
 | `self-test.yml` | Runs known-good and known-bad samples (`selftest/`) through the same scripts. It is also the only workflow that writes the toolchain/mathlib cache. |
 
@@ -16,6 +16,14 @@ over.
 **Lean, job `elaborate`** (untrusted, no secrets, `contents: read`)
 - Compiles the submission. Elaboration can execute code if the static policy is ever bypassed.
 - Only `Submission.*` build outputs and a `build-ok` flag leave this job.
+
+**Pinned statement**
+- The platform chooses it, never the submission: the problem's curated `lean_target`, or the formal statement the
+  claim's author fixed at submission (reviewers check that it matches the claim's words).
+- It is compiled in the trusted `check` job, so it must be a plain `Prop` term: the submission policy applies and, in
+  addition, no `by` blocks, `do` blocks, commands (`theorem`, `open`, `set_option`, …), attributes or string
+  literals (`checkFormalStatement` in `scripts/lean-policy.mjs`). A rejected statement makes the run fail and is never
+  compiled.
 
 **Lean, job `check`** (fresh VM, no secrets)
 - First builds the trusted inspector `CairnCheck.lean` and the target module `CairnVerify/Target.lean`, before

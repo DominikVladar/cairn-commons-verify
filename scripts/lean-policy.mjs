@@ -89,13 +89,76 @@ export function scanLeanSource(src) {
 }
 
 /**
+ * A pinned formal statement is compiled in the trusted job (it defines what a proof must prove), so it must be a
+ * plain `Prop` term: the submission policy applies, and additionally no tactic blocks (`by`), no `do` blocks, no
+ * commands (a newline + `theorem …` would otherwise start a new declaration) and no attributes or options. Term
+ * elaboration then only runs Mathlib's own, trusted elaborators.
+ */
+const TARGET_BANNED_WORDS = [
+  "by",
+  "do",
+  "import",
+  "open",
+  "def",
+  "theorem",
+  "lemma",
+  "example",
+  "abbrev",
+  "instance",
+  "structure",
+  "inductive",
+  "class",
+  "namespace",
+  "section",
+  "end",
+  "variable",
+  "universe",
+  "axiom",
+  "attribute",
+  "set_option",
+  "macro",
+  "syntax",
+  "elab",
+  "notation",
+  "infix",
+  "infixl",
+  "infixr",
+  "prefix",
+  "postfix",
+  "mutual",
+  "noncomputable",
+  "private",
+  "protected",
+  "opaque",
+  "deriving",
+  "partial",
+  "unsafe",
+];
+
+export function checkFormalStatement(text) {
+  const violations = [];
+  if (typeof text !== "string" || !text.trim()) return { ok: false, violations: ["the statement is empty"] };
+  if (text.length > 5000) violations.push("the statement is longer than 5000 characters");
+  const scan = scanLeanSource(text);
+  violations.push(...scan.violations);
+  const code = stripCommentsAndStrings(text);
+  if (/"/.test(code)) violations.push("string literals are not allowed in a statement");
+  for (const w of TARGET_BANNED_WORDS)
+    if (new RegExp(`(^|[^\\w.'])${w}(?![\\w'])`).test(code))
+      violations.push(`\`${w}\` is not allowed in a statement`);
+  if (/@\[|#[a-z]/.test(code)) violations.push("attributes and `#` commands are not allowed in a statement");
+  return { ok: violations.length === 0, violations: [...new Set(violations)] };
+}
+
+/**
  * Trusted target module (compiled in the check job, never imports the submission): defines `cairnTarget : Prop`
  * as the problem's pinned statement. The inspector then asks the kernel whether the theorem's type is
  * definitionally equal to it.
  */
 export function buildTargetFile(target, imports = "Mathlib") {
   if (typeof target !== "string" || !target.trim()) throw new Error("empty target statement");
-  if (/^\s*import\b/m.test(target)) throw new Error("the target statement must not contain imports");
+  const check = checkFormalStatement(target);
+  if (!check.ok) throw new Error(`target statement rejected: ${check.violations.join("; ")}`);
   const header = imports
     .split(/\s+/)
     .filter(Boolean)
@@ -131,7 +194,13 @@ export function parseInspection(output) {
 }
 
 /** Final verdict from the trusted job's observations. */
-export function evaluate({ scan, buildOk, checkerOk, inspection, theorem, target }) {
+export function evaluate({ scan, buildOk, checkerOk, inspection, theorem, target, targetViolations = [] }) {
+  // A proof is only worth something relative to the statement it proves: without a pinned statement a run could
+  // "verify" `theorem main : True`, so it never passes.
+  if (!target)
+    return { status: "failed", reason: "no pinned statement: the proof is not tied to what it should prove" };
+  if (targetViolations.length)
+    return { status: "failed", reason: `pinned statement rejected: ${targetViolations.join("; ")}` };
   if (!scan.ok) return { status: "failed", reason: `policy: ${scan.violations.join("; ")}` };
   if (!buildOk) return { status: "failed", reason: "the submission does not compile" };
   if (!checkerOk) return { status: "failed", reason: "kernel replay (leanchecker) failed" };
@@ -147,8 +216,12 @@ export function evaluate({ scan, buildOk, checkerOk, inspection, theorem, target
   if (target && inspection.targetMatches !== true)
     return {
       status: "failed",
-      reason: `the theorem does not prove the problem's target statement${inspection.error ? ` (${inspection.error})` : ""}`,
+      reason: `the theorem does not prove the pinned statement${inspection.error ? ` (${inspection.error})` : ""}`,
       axioms,
     };
-  return { status: "passed", reason: "compiles, kernel-checked, standard axioms only", axioms };
+  return {
+    status: "passed",
+    reason: "compiles, kernel-checked, standard axioms only, proves exactly the pinned statement",
+    axioms,
+  };
 }

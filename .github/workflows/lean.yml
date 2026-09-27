@@ -12,7 +12,8 @@ on:
       artifact_url: { description: "Artifact URL (Cairn Commons API)", required: true }
       artifact_sha256: { description: "Expected SHA-256 of the artifact", required: true }
       theorem: { description: "Main theorem name", required: false, default: "main" }
-      target_b64: { description: "Base64 Lean statement the theorem must prove (optional)", required: false, default: "" }
+      target_b64: { description: "Base64 Lean statement the theorem must prove (without it the run fails)", required: false, default: "" }
+      target_imports: { description: "Space-separated imports for the statement (default Mathlib)", required: false, default: "Mathlib" }
 
 permissions: {}
 
@@ -66,6 +67,7 @@ jobs:
       ARTIFACT_SHA256: ${{ inputs.artifact_sha256 }}
       THEOREM: ${{ inputs.theorem }}
       TARGET_B64: ${{ inputs.target_b64 }}
+      TARGET_IMPORTS: ${{ inputs.target_imports }}
     steps:
       - uses: actions/checkout@v4
         with: { persist-credentials: false }

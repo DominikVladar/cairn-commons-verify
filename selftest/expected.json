@@ -1,1 +1,8 @@
-{ "good": "passed", "wrong-target": "failed", "choice": "passed", "policy": "failed" }
+{
+  "good": "passed",
+  "wrong-target": "failed",
+  "choice": "passed",
+  "policy": "failed",
+  "bad-target": "failed",
+  "no-target": "failed"
+}

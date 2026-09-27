@@ -9,12 +9,14 @@ incoming="$1"
 : "${THEOREM:=main}"
 mkdir -p CairnVerify
 lake build cairncheck
+target_flag=""
 if [ -n "${TARGET_B64:-}" ]; then
   node scripts/evaluate-lean.mjs write-target
-  lake build CairnVerify.Target
-  target_flag="--target"
-else
-  target_flag=""
+  # write-target skips statements that fail the policy; the evaluation then fails with the reason.
+  if [ -f CairnVerify/Target.lean ]; then
+    lake build CairnVerify.Target
+    target_flag="--target"
+  fi
 fi
 if [ -n "${ARTIFACT_SHA256:-}" ]; then
   echo "$ARTIFACT_SHA256  $incoming/CairnVerify/Submission.lean" | sha256sum -c -
