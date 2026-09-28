@@ -9,6 +9,7 @@ export interface Inspection {
   inSubmission: boolean;
   axioms: string[];
   targetMatches: boolean | null;
+  negationMatches?: boolean | null;
   error: string | null;
 }
 export function parseInspection(output: string): Inspection | null;
@@ -20,4 +21,6 @@ export function evaluate(input: {
   theorem: string;
   target: string | null;
   targetViolations?: string[];
-}): { status: "passed" | "failed" | "error"; reason: string; axioms?: string[] };
+  targetBuildOk?: boolean;
+  acceptNegation?: boolean;
+}): { status: "passed" | "failed" | "error"; reason: string; axioms?: string[]; negation?: boolean };

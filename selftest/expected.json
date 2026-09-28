@@ -4,5 +4,7 @@
   "choice": "passed",
   "policy": "failed",
   "bad-target": "failed",
-  "no-target": "failed"
+  "no-target": "failed",
+  "negation": "passed",
+  "illtyped": "failed"
 }

@@ -11,7 +11,7 @@ if (process.env.ARTIFACT_FILE) {
   buf = readFileSync(process.env.ARTIFACT_FILE);
   sha = createHash("sha256").update(buf).digest("hex");
 } else {
-  ({ buf, sha } = await fetchArtifact(required("ARTIFACT_URL"), required("ARTIFACT_SHA256"), 1_000_000));
+  ({ buf, sha } = await fetchArtifact(required("ARTIFACT_URL"), required("ARTIFACT_SHA256"), 6_000_000));
 }
 const src = buf.toString("utf8");
 const scan = scanLeanSource(src);

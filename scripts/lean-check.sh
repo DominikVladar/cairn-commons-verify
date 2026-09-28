@@ -10,12 +10,18 @@ incoming="$1"
 mkdir -p CairnVerify
 lake build cairncheck
 target_flag=""
+TARGET_BUILD_OK=true
 if [ -n "${TARGET_B64:-}" ]; then
-  node scripts/evaluate-lean.mjs write-target
+  node scripts/evaluate-lean.mjs write-target || true
   # write-target skips statements that fail the policy; the evaluation then fails with the reason.
   if [ -f CairnVerify/Target.lean ]; then
-    lake build CairnVerify.Target
-    target_flag="--target"
+    if lake build CairnVerify.Target; then
+      target_flag="--target"
+      if [ "${ACCEPT_NEGATION:-false}" = "true" ]; then target_flag="--target --negation"; fi
+    else
+      # A statement that passes the policy but does not elaborate: a clear "failed", not a silent abort.
+      TARGET_BUILD_OK=false
+    fi
   fi
 fi
 if [ -n "${ARTIFACT_SHA256:-}" ]; then
@@ -39,4 +45,4 @@ if [ "$CHECKER_OK" = "true" ]; then
   timeout 1200 lake env .lake/build/bin/cairncheck "$THEOREM" $target_flag > inspection.txt || true
   cat inspection.txt
 fi
-BUILD_OK="$BUILD_OK" CHECKER_OK="$CHECKER_OK" node scripts/evaluate-lean.mjs evaluate
+BUILD_OK="$BUILD_OK" CHECKER_OK="$CHECKER_OK" TARGET_BUILD_OK="$TARGET_BUILD_OK" node scripts/evaluate-lean.mjs evaluate

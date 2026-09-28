@@ -14,7 +14,9 @@ for f in selftest/*.lean; do
   rm -rf .lake/build/lib/lean/CairnVerify
   target=""
   if [ -f "selftest/$name.target" ]; then target="$(base64 -w0 "selftest/$name.target")"; fi
-  RUN_ID="selftest-$name" ARTIFACT_SHA256="$(sha256sum "$f" | cut -d' ' -f1)" THEOREM=main TARGET_B64="$target" \
+  negation=false
+  if [ -f "selftest/$name.negation" ]; then negation=true; fi
+  RUN_ID="selftest-$name" ARTIFACT_SHA256="$(sha256sum "$f" | cut -d' ' -f1)" THEOREM=main TARGET_B64="$target" ACCEPT_NEGATION="$negation" \
     scripts/lean-check.sh incoming > /dev/null
   got="$(node -p 'JSON.parse(require("fs").readFileSync("result.json")).status')"
   want="$(node -p "JSON.parse(require('fs').readFileSync('selftest/expected.json'))['$name']")"

@@ -72,7 +72,7 @@ The reproduction images are listed in `scripts/run-reproduction.mjs`. Keep them 
      same value as the Worker secret `VERIFY_WEBHOOK_SECRET`.
    - Optionally restrict deployment to the `main` branch.
 2. Settings → Variables → Actions → add the repository variable `CAIRN_CALLBACK_URL`:
-   `https://<host>/api/v1/hooks/verification`.
+   `https://cairn-commons.com/api/v1/hooks/verification`.
 3. In the **main** repository, add the secret `VERIFY_DISPATCH_TOKEN`. It is a fine-grained personal access token
    with access to *this repository only* and permission **Actions: Read and write**. The variable `VERIFY_REPO`
    defaults to `DominikVladar/cairn-commons-verify`. The scheduled job `dispatch-verifications` then starts runs

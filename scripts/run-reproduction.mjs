@@ -28,7 +28,7 @@ const { buf, sha } = process.env.ARTIFACT_FILE
     })()
   : await fetchArtifact(required("ARTIFACT_URL"), required("ARTIFACT_SHA256"));
 mkdirSync("work", { recursive: true });
-// Single-file artifacts are written as main.<ext>; the command refers to that name.
+// The artifact keeps the file name it was uploaded with (FILENAME); the command refers to that name.
 const name =
   process.env.FILENAME && /^[\w.-]+$/.test(process.env.FILENAME) ? process.env.FILENAME : "main.py";
 writeFileSync(`work/${name}`, buf);
@@ -63,11 +63,13 @@ const run = spawnSync(
     "-v",
     `${process.cwd()}/work:/work:ro`,
     "-w",
-    "/work",
+    "/tmp",
     image,
     "sh",
     "-c",
-    command,
+    // The code is mounted read-only; it runs from a writable copy so compilers can write their output
+    // (e.g. `gcc main.c && ./a.out`).
+    `mkdir -p /tmp/w && cp -r /work/. /tmp/w && cd /tmp/w && ${command}`,
   ],
   { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
 );

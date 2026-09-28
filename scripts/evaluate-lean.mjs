@@ -19,7 +19,10 @@ const target = process.env.TARGET_B64 ? Buffer.from(process.env.TARGET_B64, "bas
 if (mode === "write-target") {
   // Only a statement that passes the term policy is ever compiled (in this trusted job).
   if (target && checkFormalStatement(target).ok)
-    writeFileSync("CairnVerify/Target.lean", buildTargetFile(target, process.env.TARGET_IMPORTS));
+    writeFileSync(
+      "CairnVerify/Target.lean",
+      buildTargetFile(target, process.env.TARGET_IMPORTS || undefined),
+    );
 } else {
   const scan = scanLeanSource(readFileSync("CairnVerify/Submission.lean", "utf8"));
   let inspectionOutput = "";
@@ -34,12 +37,19 @@ if (mode === "write-target") {
     theorem,
     target,
     targetViolations: target ? checkFormalStatement(target).violations : [],
+    targetBuildOk: process.env.TARGET_BUILD_OK !== "false",
+    acceptNegation: process.env.ACCEPT_NEGATION === "true",
   });
   writeResult("result.json", {
     runId: required("RUN_ID"),
     status: verdict.status,
     artifactSha256: required("ARTIFACT_SHA256"),
     log: verdict.reason,
-    details: { axioms: verdict.axioms ?? null, theorem, targetChecked: !!target },
+    details: {
+      axioms: verdict.axioms ?? null,
+      theorem,
+      targetChecked: !!target,
+      negation: verdict.negation === true,
+    },
   });
 }

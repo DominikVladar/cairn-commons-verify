@@ -186,6 +186,7 @@ export function parseInspection(output) {
       inSubmission: j.inSubmission === true,
       axioms: j.axioms.filter((a) => typeof a === "string"),
       targetMatches: typeof j.targetMatches === "boolean" ? j.targetMatches : null,
+      negationMatches: typeof j.negationMatches === "boolean" ? j.negationMatches : null,
       error: typeof j.error === "string" ? j.error : null,
     };
   } catch {
@@ -194,13 +195,28 @@ export function parseInspection(output) {
 }
 
 /** Final verdict from the trusted job's observations. */
-export function evaluate({ scan, buildOk, checkerOk, inspection, theorem, target, targetViolations = [] }) {
+export function evaluate({
+  scan,
+  buildOk,
+  checkerOk,
+  inspection,
+  theorem,
+  target,
+  targetViolations = [],
+  targetBuildOk = true,
+  acceptNegation = false,
+}) {
   // A proof is only worth something relative to the statement it proves: without a pinned statement a run could
   // "verify" `theorem main : True`, so it never passes.
   if (!target)
     return { status: "failed", reason: "no pinned statement: the proof is not tied to what it should prove" };
   if (targetViolations.length)
     return { status: "failed", reason: `pinned statement rejected: ${targetViolations.join("; ")}` };
+  if (!targetBuildOk)
+    return {
+      status: "failed",
+      reason: "the pinned statement does not elaborate (it is not a valid Lean Prop)",
+    };
   if (!scan.ok) return { status: "failed", reason: `policy: ${scan.violations.join("; ")}` };
   if (!buildOk) return { status: "failed", reason: "the submission does not compile" };
   if (!checkerOk) return { status: "failed", reason: "kernel replay (leanchecker) failed" };
@@ -213,6 +229,13 @@ export function evaluate({ scan, buildOk, checkerOk, inspection, theorem, target
   const extra = axioms.filter((a) => !ALLOWED_AXIOMS.includes(a));
   if (extra.length)
     return { status: "failed", reason: `uses disallowed axioms: ${extra.join(", ")}`, axioms };
+  if (acceptNegation && inspection.targetMatches !== true && inspection.negationMatches === true)
+    return {
+      status: "passed",
+      reason: "compiles, kernel-checked, standard axioms only, proves the NEGATION of the pinned statement",
+      axioms,
+      negation: true,
+    };
   if (target && inspection.targetMatches !== true)
     return {
       status: "failed",

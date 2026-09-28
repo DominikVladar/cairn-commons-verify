@@ -14,6 +14,7 @@ on:
       theorem: { description: "Main theorem name", required: false, default: "main" }
       target_b64: { description: "Base64 Lean statement the theorem must prove (without it the run fails)", required: false, default: "" }
       target_imports: { description: "Space-separated imports for the statement (default Mathlib)", required: false, default: "Mathlib" }
+      accept_negation: { description: "true for a problem's yes/no statement: a proof of its negation also settles it", required: false, default: "false" }
 
 permissions: {}
 
@@ -68,6 +69,7 @@ jobs:
       THEOREM: ${{ inputs.theorem }}
       TARGET_B64: ${{ inputs.target_b64 }}
       TARGET_IMPORTS: ${{ inputs.target_imports }}
+      ACCEPT_NEGATION: ${{ inputs.accept_negation }}
     steps:
       - uses: actions/checkout@v4
         with: { persist-credentials: false }
@@ -90,14 +92,15 @@ jobs:
         with: { name: result, path: result.json, retention-days: 7 }
 
   report:
-    needs: check
-    if: always() && needs.check.result == 'success'
+    needs: [elaborate, check]
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: { contents: read }
     environment: report
     env:
       RUN_ID: ${{ inputs.run_id }}
+      ARTIFACT_SHA256: ${{ inputs.artifact_sha256 }}
       WEBHOOK_SECRET: ${{ secrets.CAIRN_WEBHOOK_SECRET }}
       CALLBACK_URL: ${{ vars.CAIRN_CALLBACK_URL }}
     steps:
@@ -105,6 +108,11 @@ jobs:
         with: { persist-credentials: false, sparse-checkout: scripts }
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - uses: actions/download-artifact@v4
+      # Only the trusted check job's result is ever read. If it did not succeed, a non-counting "error" is sent.
+      - if: needs.check.result == 'success'
+        uses: actions/download-artifact@v4
         with: { name: result }
-      - run: node scripts/report.mjs
+      - if: needs.check.result == 'success'
+        run: node scripts/report.mjs
+      - if: needs.check.result != 'success'
+        run: node scripts/report.mjs --error "elaborate ${{ needs.elaborate.result }}, check ${{ needs.check.result }}"

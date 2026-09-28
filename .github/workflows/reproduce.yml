@@ -41,12 +41,14 @@ jobs:
 
   report:
     needs: run
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: { contents: read }
     environment: report
     env:
       RUN_ID: ${{ inputs.run_id }}
+      ARTIFACT_SHA256: ${{ inputs.artifact_sha256 }}
       WEBHOOK_SECRET: ${{ secrets.CAIRN_WEBHOOK_SECRET }}
       CALLBACK_URL: ${{ vars.CAIRN_CALLBACK_URL }}
     steps:
@@ -54,6 +56,10 @@ jobs:
         with: { persist-credentials: false, sparse-checkout: scripts }
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - uses: actions/download-artifact@v4
+      - if: needs.run.result == 'success'
+        uses: actions/download-artifact@v4
         with: { name: result }
-      - run: node scripts/report.mjs
+      - if: needs.run.result == 'success'
+        run: node scripts/report.mjs
+      - if: needs.run.result != 'success'
+        run: node scripts/report.mjs --error "run ${{ needs.run.result }}"
