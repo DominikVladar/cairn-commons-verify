@@ -15,6 +15,7 @@ on:
       target_b64: { description: "Base64 Lean statement the theorem must prove (without it the run fails)", required: false, default: "" }
       target_imports: { description: "Space-separated imports for the statement (default Mathlib)", required: false, default: "Mathlib" }
       accept_negation: { description: "true for a problem's yes/no statement: a proof of its negation also settles it", required: false, default: "false" }
+      target_mode: { description: "exact, or iff_rhs for a Formal Conjectures yes/no statement `answer(sorry) ↔ P` (prove P or ¬P)", required: false, default: "exact" }
 
 permissions: {}
 
@@ -70,6 +71,7 @@ jobs:
       TARGET_B64: ${{ inputs.target_b64 }}
       TARGET_IMPORTS: ${{ inputs.target_imports }}
       ACCEPT_NEGATION: ${{ inputs.accept_negation }}
+      TARGET_MODE: ${{ inputs.target_mode }}
     steps:
       - uses: actions/checkout@v4
         with: { persist-credentials: false }

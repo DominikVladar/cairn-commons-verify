@@ -57,8 +57,17 @@ over.
 
 `versions.env` pins mathlib by commit (`MATHLIB_REV`, tag in `MATHLIB_TAG`). Mathlib's `lean-toolchain` at that
 commit decides the Lean version. `leanchecker` ships with every Lean toolchain since v4.28 and replaces the
-archived lean4checker repository. To upgrade:
-1. Change both lines.
+archived lean4checker repository.
+
+It also pins [Formal Conjectures](https://github.com/google-deepmind/formal-conjectures) (`FC_REV`, Apache-2.0):
+problems imported from it pin their statements to its theorems (`type_of% @Namespace.theorem`, importing the
+theorem's module), and proofs may import its modules. Its Mathlib must be the same as `MATHLIB_REV` — setup fails
+otherwise. Its modules are compiled from source on demand in the trusted job (the submission's imports via
+`CairnVerify/Deps.lean`); only Mathlib comes from the cache. For yes/no statements `answer(sorry) ↔ P` the inspector's
+`--iff-rhs` flag compares the proof with `P` (or `¬P`).
+
+To upgrade:
+1. Change the lines together (a Formal Conjectures commit and the Mathlib commit it pins).
 2. Push.
 3. Check that `self-test.yml` is green.
 

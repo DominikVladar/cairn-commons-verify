@@ -17,7 +17,8 @@ if [ -n "${TARGET_B64:-}" ]; then
   if [ -f CairnVerify/Target.lean ]; then
     if lake build CairnVerify.Target; then
       target_flag="--target"
-      if [ "${ACCEPT_NEGATION:-false}" = "true" ]; then target_flag="--target --negation"; fi
+      if [ "${ACCEPT_NEGATION:-false}" = "true" ]; then target_flag="$target_flag --negation"; fi
+      if [ "${TARGET_MODE:-exact}" = "iff_rhs" ]; then target_flag="$target_flag --iff-rhs"; fi
     else
       # A statement that passes the policy but does not elaborate: a clear "failed", not a silent abort.
       TARGET_BUILD_OK=false
@@ -29,6 +30,10 @@ if [ -n "${ARTIFACT_SHA256:-}" ]; then
 fi
 mkdir -p CairnVerify .lake/build/lib/lean/CairnVerify
 cp "$incoming/CairnVerify/Submission.lean" CairnVerify/Submission.lean
+# The submission's imports (Mathlib from the cache; Formal Conjectures modules compiled here, from trusted source)
+# must exist before its compiled module can be replayed. Deps.lean holds exactly its policy-checked imports.
+node scripts/evaluate-lean.mjs write-deps
+lake build CairnVerify.Deps || true
 BUILD_OK="$(cat "$incoming/build-ok.txt" 2>/dev/null || echo false)"
 if [ "$BUILD_OK" = "true" ]; then
   # Only the submission's compiled files are taken over; everything else stays trusted.

@@ -1,6 +1,7 @@
 // Job 2 (trusted, no secrets): combine observations into the verdict. Inputs come from files written by
 // trusted steps of this job (the policy scan is re-computed here from the hash-checked source, not taken from job 1).
 //   write-target — writes CairnVerify/Target.lean from TARGET_B64 (the pinned statement), if it passes the policy
+//   write-deps   — writes CairnVerify/Deps.lean with the submission's (policy-allowed) imports, built trusted
 //   evaluate     — reads inspection.txt (output of the compiled inspector) and writes result.json
 import { readFileSync, writeFileSync } from "node:fs";
 import { required, writeResult } from "./common.mjs";
@@ -23,6 +24,19 @@ if (mode === "write-target") {
       "CairnVerify/Target.lean",
       buildTargetFile(target, process.env.TARGET_IMPORTS || undefined),
     );
+} else if (mode === "write-deps") {
+  const scan = scanLeanSource(readFileSync("CairnVerify/Submission.lean", "utf8"));
+  // Only allowed imports reach this file (a disallowed one fails the policy anyway).
+  const imports = scan.imports.filter((i) =>
+    /^(Mathlib|Batteries|Aesop|Qq|Plausible|FormalConjectures)/.test(i),
+  );
+  writeFileSync(
+    "CairnVerify/Deps.lean",
+    `${imports
+      .filter((i) => !/[^\w.'«»-]/.test(i))
+      .map((i) => `import ${i}`)
+      .join("\n")}\n`,
+  );
 } else {
   const scan = scanLeanSource(readFileSync("CairnVerify/Submission.lean", "utf8"));
   let inspectionOutput = "";
@@ -49,6 +63,7 @@ if (mode === "write-target") {
       axioms: verdict.axioms ?? null,
       theorem,
       targetChecked: !!target,
+      targetMode: process.env.TARGET_MODE === "iff_rhs" ? "iff_rhs" : "exact",
       negation: verdict.negation === true,
     },
   });

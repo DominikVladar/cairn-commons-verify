@@ -5,7 +5,7 @@ set -euo pipefail
 fail=0
 for f in selftest/*.lean; do
   name="$(basename "$f" .lean)"
-  rm -rf incoming CairnVerify/Submission.lean CairnVerify/Target.lean .lake/build/lib/lean/CairnVerify
+  rm -rf incoming CairnVerify/Submission.lean CairnVerify/Target.lean CairnVerify/Deps.lean .lake/build/lib/lean/CairnVerify
   ARTIFACT_FILE="$f" node scripts/prepare-lean.mjs > /dev/null
   scripts/lean-elaborate.sh
   mkdir -p incoming/CairnVerify incoming/.lake/build/lib/lean/CairnVerify
@@ -16,7 +16,12 @@ for f in selftest/*.lean; do
   if [ -f "selftest/$name.target" ]; then target="$(base64 -w0 "selftest/$name.target")"; fi
   negation=false
   if [ -f "selftest/$name.negation" ]; then negation=true; fi
+  mode=exact
+  if [ -f "selftest/$name.mode" ]; then mode="$(tr -d '[:space:]' < "selftest/$name.mode")"; fi
+  imports=Mathlib
+  if [ -f "selftest/$name.imports" ]; then imports="$(tr -d '\n' < "selftest/$name.imports")"; fi
   RUN_ID="selftest-$name" ARTIFACT_SHA256="$(sha256sum "$f" | cut -d' ' -f1)" THEOREM=main TARGET_B64="$target" ACCEPT_NEGATION="$negation" \
+    TARGET_MODE="$mode" TARGET_IMPORTS="$imports" \
     scripts/lean-check.sh incoming > /dev/null
   got="$(node -p 'JSON.parse(require("fs").readFileSync("result.json")).status')"
   want="$(node -p "JSON.parse(require('fs').readFileSync('selftest/expected.json'))['$name']")"

@@ -7,6 +7,11 @@ name = "mathlib"
 git = "https://github.com/leanprover-community/mathlib4"
 rev = "@MATHLIB_REV@"
 
+[[require]]
+name = "formal_conjectures"
+git = "https://github.com/google-deepmind/formal-conjectures"
+rev = "@FC_REV@"
+
 [[lean_lib]]
 name = "CairnVerify"
 

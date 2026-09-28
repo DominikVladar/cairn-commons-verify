@@ -34,7 +34,10 @@ const BANNED = [
   { re: /\bIO\b|\bSystem\.FilePath\b/, why: "IO is not allowed" },
 ];
 
-const ALLOWED_IMPORT = /^(Mathlib|Batteries|Aesop|Qq|Plausible)(\.[A-Za-z0-9_']+)*$/;
+// Formal Conjectures (Google DeepMind, Apache-2.0) is pinned in lakefile.toml.in: problems imported from it pin their
+// statements to its theorems, so proofs may import its modules (file names like 242.lean become «242»).
+const ALLOWED_IMPORT =
+  /^(Mathlib|Batteries|Aesop|Qq|Plausible|FormalConjectures|FormalConjecturesUtil|FormalConjecturesForMathlib)(\.([A-Za-z0-9_']+|«[A-Za-z0-9_'.-]+»))*$/;
 
 /** Remove comments and string literals so that banned words inside them do not count (and cannot hide code). */
 export function stripCommentsAndStrings(src) {
@@ -83,7 +86,9 @@ export function scanLeanSource(src) {
   const imports = [...code.matchAll(/^\s*import\s+(.+)$/gm)].flatMap((m) => m[1].trim().split(/\s+/));
   for (const imp of imports)
     if (!ALLOWED_IMPORT.test(imp))
-      violations.push(`import ${imp} is not allowed (only Mathlib, Batteries, Aesop, Qq, Plausible)`);
+      violations.push(
+        `import ${imp} is not allowed (only Mathlib, Batteries, Aesop, Qq, Plausible and Formal Conjectures)`,
+      );
   for (const b of BANNED) if (b.re.test(code)) violations.push(b.why);
   return { ok: violations.length === 0, violations, imports };
 }
@@ -163,7 +168,7 @@ export function buildTargetFile(target, imports = "Mathlib") {
     .split(/\s+/)
     .filter(Boolean)
     .map((m) => {
-      if (!/^[A-Za-z_][\w.']*$/.test(m)) throw new Error(`invalid import ${m}`);
+      if (!ALLOWED_IMPORT.test(m)) throw new Error(`invalid import ${m}`);
       return `import ${m}`;
     });
   return `${[...header, "", `def cairnTarget : Prop := ${target.trim()}`].join("\n")}\n`;

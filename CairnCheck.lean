@@ -6,13 +6,15 @@ every imported module, so importing an untrusted `.olean` there would let it exe
 This program uses `importModules` without enabling initializer execution (like `leanchecker`), so the
 submission's `.olean` is only read as data.
 
-Usage: cairncheck <theorem> [--target [--negation]]
+Usage: cairncheck <theorem> [--target [--negation] [--iff-rhs]]
   Imports `CairnVerify.Submission` (and `CairnVerify.Target` with `--target`, which defines `cairnTarget : Prop`
   from the pinned statement) and prints one JSON object:
   { "found", "isTheorem", "inSubmission", "axioms": [..], "targetMatches": true|false|null,
     "negationMatches": true|false|null, "error": null|".." }
   With `--negation` (a problem's curated yes/no statement), a proof of `¬ cairnTarget` is recognised too: it settles
   the problem the other way.
+  With `--iff-rhs` the target is a yes/no question stated as `answer(sorry) ↔ P` (Formal Conjectures, possibly under
+  binders): the proof must prove `P` (or `¬ P` with `--negation`) — the unknown answer on the left is dropped.
 -/
 import Lean
 
@@ -42,6 +44,14 @@ partial def collectAxioms (env : Environment) (root : Name) : Array Name := Id.r
         unless seen.contains r do stack := stack.push r
   return axioms.qsort (·.toString < ·.toString)
 
+/-- `∀ xs, (a ↔ P xs)` ↦ `∀ xs, P xs`: the right-hand side of a yes/no statement, under the same binders. -/
+partial def iffRhs : Expr → Option Expr
+  | .forallE n d b bi => (iffRhs b).map (.forallE n d · bi)
+  | .mdata _ e => iffRhs e
+  | e =>
+    let args := e.getAppArgs
+    if e.getAppFn.isConstOf ``Iff && args.size == 2 then some args[1]! else none
+
 def optBool : Option Bool → Json
   | some b => toJson b
   | none => Json.null
@@ -56,11 +66,15 @@ def result (found isThm inSub : Bool) (axioms : Array Name) (target : Option Boo
     ("error", match err with | some e => toJson e | none => Json.null)]
 
 def main (args : List String) : IO UInt32 := do
-  let (thmStr, withTarget, withNegation) ← match args with
-    | [t] => pure (t, false, false)
-    | [t, "--target"] => pure (t, true, false)
-    | [t, "--target", "--negation"] => pure (t, true, true)
-    | _ => throw <| IO.userError "usage: cairncheck <theorem> [--target [--negation]]"
+  let usage := IO.userError "usage: cairncheck <theorem> [--target [--negation] [--iff-rhs]]"
+  let (thmStr, flags) ← match args with
+    | t :: rest =>
+      if rest.all (fun f => f == "--target" || f == "--negation" || f == "--iff-rhs") then pure (t, rest)
+      else throw usage
+    | [] => throw usage
+  let withTarget := flags.contains "--target"
+  let withNegation := withTarget && flags.contains "--negation"
+  let withIffRhs := withTarget && flags.contains "--iff-rhs"
   let thm := thmStr.toName
   if thm.isAnonymous then
     IO.println (result false false false #[] none (some "invalid theorem name")).compress
@@ -83,13 +97,18 @@ def main (args : List String) : IO UInt32 := do
   if withTarget then
     match env.find? `cairnTarget with
     | some (.defnInfo t) =>
-      if t.levelParams.length == ci.levelParams.length then
+      let goal? := if withIffRhs then iffRhs t.value else some t.value
+      if goal?.isNone then
+        target := some false
+        err := some "the pinned statement is not of the form `answer ↔ P`"
+      else if t.levelParams.length == ci.levelParams.length then
+        let goal := goal?.get!
         let ty := ci.type.instantiateLevelParams ci.levelParams (t.levelParams.map Level.param)
-        match Kernel.isDefEq env {} ty t.value with
+        match Kernel.isDefEq env {} ty goal with
         | .ok b => target := some b
         | .error _ => target := some false; err := some "kernel error while comparing with the target"
         if withNegation && target != some true then
-          match Kernel.isDefEq env {} ty (mkApp (mkConst ``Not) t.value) with
+          match Kernel.isDefEq env {} ty (mkApp (mkConst ``Not) goal) with
           | .ok b => negation := some b
           | .error _ => negation := some false
       else
