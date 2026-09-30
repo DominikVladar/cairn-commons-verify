@@ -160,8 +160,9 @@ export function checkFormalStatement(text) {
  * as the problem's pinned statement. The inspector then asks the kernel whether the theorem's type is
  * definitionally equal to it.
  */
-export function buildTargetFile(target, imports = "Mathlib") {
+export function buildTargetFile(target, imports = "Mathlib", name = "cairnTarget") {
   if (typeof target !== "string" || !target.trim()) throw new Error("empty target statement");
+  if (!/^[A-Za-z_][\w]*$/.test(name)) throw new Error(`invalid target name ${name}`);
   const check = checkFormalStatement(target);
   if (!check.ok) throw new Error(`target statement rejected: ${check.violations.join("; ")}`);
   const header = imports
@@ -171,7 +172,28 @@ export function buildTargetFile(target, imports = "Mathlib") {
       if (!ALLOWED_IMPORT.test(m)) throw new Error(`invalid import ${m}`);
       return `import ${m}`;
     });
-  return `${[...header, "", `def cairnTarget : Prop := ${target.trim()}`].join("\n")}\n`;
+  // `type_of% @Upstream.theorem` (a statement pinned to a collection such as Formal Conjectures): the theorem may be
+  // universe-polymorphic (`∀ E : Type u, …`), and a plain `def … : Prop := type_of% …` would then contain universe
+  // metavariables, which Lean rejects. The target takes over the theorem's statement with its universe parameters
+  // (the inspector compares them with the proof's).
+  const upstream = /^type_of%\s+@([A-Za-z_«][\w.'«»]*)$/.exec(target.trim());
+  if (upstream)
+    return `${[
+      ...header,
+      "import Lean",
+      "",
+      "open Lean Elab Command in",
+      "/-- Defines the target as the statement of a theorem, keeping its universe parameters. -/",
+      'elab "cairn_target_of% " thm:ident : command => do',
+      "  let n ← liftCoreM <| realizeGlobalConstNoOverloadWithInfo thm",
+      "  let ci ← getConstInfo n",
+      "  liftCoreM <| addDecl <| .defnDecl {",
+      `    name := \`${name}, levelParams := ci.levelParams, type := .sort .zero, value := ci.type,`,
+      `    hints := .abbrev, safety := .safe, all := [\`${name}] }`,
+      "",
+      `cairn_target_of% ${upstream[1]}`,
+    ].join("\n")}\n`;
+  return `${[...header, "", `def ${name} : Prop := ${target.trim()}`].join("\n")}\n`;
 }
 
 /** Parse the one-line JSON printed by the trusted inspector (`CairnCheck.lean`); null if unusable. */
